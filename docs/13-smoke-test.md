@@ -17,7 +17,7 @@ Print a hexdump of the `kubernetes-the-hard-way` secret stored in etcd:
 
 ```
 gcloud compute ssh controller-0 \
-  --command "sudo ETCDCTL_API=3 etcdctl get \
+  --command "sudo etcdctl get \
   --endpoints=https://127.0.0.1:2379 \
   --cacert=/etc/etcd/ca.pem \
   --cert=/etc/etcd/kubernetes.pem \
@@ -167,7 +167,7 @@ nginx version: nginx/1.19.10
 
 In this section you will verify the ability to expose applications using a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).
 
-Expose the `nginx` deployment using a [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport) service:
+Expose the `nginx` deployment using a [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#nodeport) service:
 
 ```
 kubectl expose deployment nginx --port 80 --type NodePort
