@@ -4,10 +4,22 @@ In this lab you will bootstrap the Kubernetes control plane across three compute
 
 ## Prerequisites
 
-The commands in this lab must be run on each controller instance: `controller-0`, `controller-1`, and `controller-2`. Login to each controller instance using the `gcloud` command. Example:
+The commands in this lab must be run on each controller instance: `controller-0`, `controller-1`, and `controller-2`. Login to each controller instance:
 
+```gcloud```
 ```
 gcloud compute ssh controller-0
+```
+
+```az```
+```
+az ssh vm --name controller-0 --local-user azureuser
+```
+
+OR
+
+```
+ssh -i $HOME/.ssh/k8sthehardway azureuser@$(az vm show -d --name controller-0 --query "publicIps" -o tsv)
 ```
 
 ### Running commands in parallel with tmux
@@ -37,40 +49,39 @@ wget -q --show-progress --https-only --timestamping \
 Install the Kubernetes binaries:
 
 ```
-{
-  chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl
-  sudo mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/
-}
+chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl
+sudo mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/
 ```
 
 ### Configure the Kubernetes API Server
 
-```
-{
+  ```
   sudo mkdir -p /var/lib/kubernetes/
 
   sudo mv ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
     service-account-key.pem service-account.pem \
     encryption-config.yaml /var/lib/kubernetes/
-}
 ```
 
 The instance internal IP address will be used to advertise the API Server to members of the cluster. Retrieve the internal IP address for the current compute instance:
 
+```gcloud```
 ```
 INTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
-```
-
-```
 REGION=$(curl -s -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/project/attributes/google-compute-default-region)
-```
-
-```
 KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
   --region $REGION \
   --format 'value(address)')
+```
+
+```az```
+```
+INTERNAL_IP=$(curl -s -H Metadata:true --noproxy "*" \
+  "http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/privateIpAddress?api-version=2021-02-01&format=text")
+REGION=$(curl -s -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01&format=text")
+KUBERNETES_PUBLIC_ADDRESS=$(curl -s -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/tagsList/0/value?api-version=2021-02-01&format=text")
 ```
 
 Create the `kube-apiserver.service` systemd unit file:
@@ -202,11 +213,9 @@ EOF
 ### Start the Controller Services
 
 ```
-{
-  sudo systemctl daemon-reload
-  sudo systemctl enable kube-apiserver kube-controller-manager kube-scheduler
-  sudo systemctl start kube-apiserver kube-controller-manager kube-scheduler
-}
+sudo systemctl daemon-reload
+sudo systemctl enable kube-apiserver kube-controller-manager kube-scheduler
+sudo systemctl start kube-apiserver kube-controller-manager kube-scheduler
 ```
 
 > Allow up to 10 seconds for the Kubernetes API Server to fully initialize.
@@ -239,12 +248,10 @@ EOF
 ```
 
 ```
-{
-  sudo mv kubernetes.default.svc.cluster.local \
-    /etc/nginx/sites-available/kubernetes.default.svc.cluster.local
+sudo mv kubernetes.default.svc.cluster.local \
+  /etc/nginx/sites-available/kubernetes.default.svc.cluster.local
 
-  sudo ln -s /etc/nginx/sites-available/kubernetes.default.svc.cluster.local /etc/nginx/sites-enabled/
-}
+sudo ln -s /etc/nginx/sites-available/kubernetes.default.svc.cluster.local /etc/nginx/sites-enabled/
 ```
 
 ```
@@ -296,8 +303,20 @@ In this section you will configure RBAC permissions to allow the Kubernetes API 
 
 The commands in this section will effect the entire cluster and only need to be run once from one of the controller nodes.
 
+```gcloud```
 ```
 gcloud compute ssh controller-0
+```
+
+```az```
+```
+az ssh vm --name controller-0 --local-user azureuser
+```
+
+OR
+
+```
+ssh -i $HOME/.ssh/k8sthehardway azureuser@$(az vm show -d --name controller-0 --query "publicIps" -o tsv)
 ```
 
 Create the `system:kube-apiserver-to-kubelet` [ClusterRole](https://kubernetes.io/docs/admin/authorization/rbac/#role-and-clusterrole) with permissions to access the Kubelet API and perform most common tasks associated with managing pods:
@@ -359,34 +378,65 @@ In this section you will provision an external load balancer to front the Kubern
 
 Create the external load balancer network resources:
 
+```gcloud```
 ```
-{
-  KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
-    --region $(gcloud config get-value compute/region) \
-    --format 'value(address)')
+KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
+  --region $(gcloud config get-value compute/region) \
+  --format 'value(address)')
 
-  gcloud compute http-health-checks create kubernetes \
-    --description "Kubernetes Health Check" \
-    --host "kubernetes.default.svc.cluster.local" \
-    --request-path "/healthz"
+gcloud compute http-health-checks create kubernetes \
+  --description "Kubernetes Health Check" \
+  --host "kubernetes.default.svc.cluster.local" \
+  --request-path "/healthz"
 
-  gcloud compute firewall-rules create kubernetes-the-hard-way-allow-health-check \
-    --network kubernetes-the-hard-way \
-    --source-ranges 209.85.152.0/22,209.85.204.0/22,35.191.0.0/16 \
-    --allow tcp
+gcloud compute firewall-rules create kubernetes-the-hard-way-allow-health-check \
+  --network kubernetes-the-hard-way \
+  --source-ranges 209.85.152.0/22,209.85.204.0/22,35.191.0.0/16 \
+  --allow tcp
 
-  gcloud compute target-pools create kubernetes-target-pool \
-    --http-health-check kubernetes
+gcloud compute target-pools create kubernetes-target-pool \
+  --http-health-check kubernetes
 
-  gcloud compute target-pools add-instances kubernetes-target-pool \
-   --instances controller-0,controller-1,controller-2
+gcloud compute target-pools add-instances kubernetes-target-pool \
+  --instances controller-0,controller-1,controller-2
 
-  gcloud compute forwarding-rules create kubernetes-forwarding-rule \
-    --address ${KUBERNETES_PUBLIC_ADDRESS} \
-    --ports 6443 \
-    --region $(gcloud config get-value compute/region) \
-    --target-pool kubernetes-target-pool
-}
+gcloud compute forwarding-rules create kubernetes-forwarding-rule \
+  --address ${KUBERNETES_PUBLIC_ADDRESS} \
+  --ports 6443 \
+  --region $(gcloud config get-value compute/region) \
+  --target-pool kubernetes-target-pool
+```
+
+```az```
+```
+KUBERNETES_PUBLIC_ADDRESS=$(az network public-ip show --name kubernetes-the-hard-way --query ipAddress -o tsv)
+
+az network lb create \
+  --name k8s-the-hard-way-lb \
+  --frontend-ip-name k8s-the-hard-way-lb-frontend \
+  --public-ip-address kubernetes-the-hard-way
+
+az network lb probe create \
+  --name http-health-checks \
+  --lb-name k8s-the-hard-way-lb \
+  --port 80 \
+  --protocol Tcp
+
+az network lb address-pool create \
+  --lb-name k8s-the-hard-way-lb \
+  --name k8s-the-hard-way-lb-backend \
+  --vnet kubernetes-the-hard-way \
+  --backend-addresses "[{name:controller-0,ip-address:10.240.0.10},{name:controller-1,ip-address:10.240.0.11},{name:controller-2,ip-address:10.240.0.12}]"
+
+az network lb rule create \
+  --lb-name k8s-the-hard-way-lb \
+  --name kubernetes-forwarding-rule \
+  --protocol Tcp \
+  --frontend-ip k8s-the-hard-way-lb-frontend \
+  --backend-port 6443 \
+  --frontend-port 6443 \
+  --probe http-health-checks \
+  --backend-pool-name k8s-the-hard-way-lb-backend
 ```
 
 ### Verification
@@ -395,10 +445,16 @@ Create the external load balancer network resources:
 
 Retrieve the `kubernetes-the-hard-way` static IP address:
 
+```gcloud```
 ```
 KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
   --region $(gcloud config get-value compute/region) \
   --format 'value(address)')
+```
+
+```az```
+```
+KUBERNETES_PUBLIC_ADDRESS=$(az network public-ip show --name kubernetes-the-hard-way --query ipAddress -o tsv)
 ```
 
 Make a HTTP request for the Kubernetes version info:

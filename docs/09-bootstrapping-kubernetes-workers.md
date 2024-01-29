@@ -4,10 +4,22 @@ In this lab you will bootstrap three Kubernetes worker nodes. The following comp
 
 ## Prerequisites
 
-The commands in this lab must be run on each worker instance: `worker-0`, `worker-1`, and `worker-2`. Login to each worker instance using the `gcloud` command. Example:
+The commands in this lab must be run on each worker instance: `worker-0`, `worker-1`, and `worker-2`. Login to each:
 
+```gcloud```
 ```
 gcloud compute ssh worker-0
+```
+
+```az```
+```
+az ssh vm --name worker-0 --local-user azureuser
+```
+
+OR
+
+```
+ssh -i $HOME/.ssh/k8sthehardway azureuser@$(az vm show -d --name worker-0 --query "publicIps" -o tsv)
 ```
 
 ### Running commands in parallel with tmux
@@ -19,10 +31,8 @@ gcloud compute ssh worker-0
 Install the OS dependencies:
 
 ```
-{
-  sudo apt-get update
-  sudo apt-get -y install socat conntrack ipset
-}
+sudo apt-get update
+sudo apt-get -y install socat conntrack ipset
 ```
 
 > The socat binary enables support for the `kubectl port-forward` command.
@@ -37,7 +47,7 @@ Verify if swap is enabled:
 sudo swapon --show
 ```
 
-If output is empthy then swap is not enabled. If swap is enabled run the following command to disable swap immediately:
+If output is empty then swap is not enabled. This is the desired setting. If swap is enabled run the following command to disable swap immediately:
 
 ```
 sudo swapoff -a
@@ -73,25 +83,30 @@ sudo mkdir -p \
 Install the worker binaries:
 
 ```
-{
-  mkdir containerd
-  tar -xvf crictl-v1.21.0-linux-amd64.tar.gz
-  tar -xvf containerd-1.4.4-linux-amd64.tar.gz -C containerd
-  sudo tar -xvf cni-plugins-linux-amd64-v0.9.1.tgz -C /opt/cni/bin/
-  sudo mv runc.amd64 runc
-  chmod +x crictl kubectl kube-proxy kubelet runc 
-  sudo mv crictl kubectl kube-proxy kubelet runc /usr/local/bin/
-  sudo mv containerd/bin/* /bin/
-}
+mkdir containerd
+tar -xvf crictl-v1.21.0-linux-amd64.tar.gz
+tar -xvf containerd-1.4.4-linux-amd64.tar.gz -C containerd
+sudo tar -xvf cni-plugins-linux-amd64-v0.9.1.tgz -C /opt/cni/bin/
+sudo mv runc.amd64 runc
+chmod +x crictl kubectl kube-proxy kubelet runc 
+sudo mv crictl kubectl kube-proxy kubelet runc /usr/local/bin/
+sudo mv containerd/bin/* /bin/
 ```
 
 ### Configure CNI Networking
 
 Retrieve the Pod CIDR range for the current compute instance:
 
+```gcloud```
 ```
 POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)
+```
+
+```az```
+```
+POD_CIDR=$(curl -s -H Metadata:true --noproxy "*" \
+  "http://169.254.169.254/metadata/instance/compute/tagsList/0/value?api-version=2021-02-01&format=text")
 ```
 
 Create the `bridge` network configuration file:
@@ -177,11 +192,9 @@ EOF
 ### Configure the Kubelet
 
 ```
-{
-  sudo mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/
-  sudo mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig
-  sudo mv ca.pem /var/lib/kubernetes/
-}
+sudo mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/
+sudo mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig
+sudo mv ca.pem /var/lib/kubernetes/
 ```
 
 Create the `kubelet-config.yaml` configuration file:
@@ -281,11 +294,9 @@ EOF
 ### Start the Worker Services
 
 ```
-{
-  sudo systemctl daemon-reload
-  sudo systemctl enable containerd kubelet kube-proxy
-  sudo systemctl start containerd kubelet kube-proxy
-}
+sudo systemctl daemon-reload
+sudo systemctl enable containerd kubelet kube-proxy
+sudo systemctl start containerd kubelet kube-proxy
 ```
 
 > Remember to run the above commands on each worker node: `worker-0`, `worker-1`, and `worker-2`.
@@ -296,9 +307,15 @@ EOF
 
 List the registered Kubernetes nodes:
 
+```gcloud```
 ```
 gcloud compute ssh controller-0 \
   --command "kubectl get nodes --kubeconfig admin.kubeconfig"
+```
+
+```az```
+```
+ssh -i $HOME/.ssh/k8sthehardway azureuser@$(az vm show -d --name controller-0 --query "publicIps" -o tsv) "kubectl get nodes --kubeconfig admin.kubeconfig"
 ```
 
 > output
